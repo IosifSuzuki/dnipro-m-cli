@@ -30,7 +30,7 @@ func (w *WarrantyCommand) Run(cmd *cobra.Command, args []string) {
 	log := w.container.GetLogger()
 	config := w.container.GetConfig()
 	warrantyWorker := worker.NewWarrantyWorker(w.container, w.dniproClient)
-	delay := 500 * time.Millisecond // half a second
+	delay := time.Second
 
 	startAt := time.Now().UTC()
 
@@ -61,17 +61,29 @@ func (w *WarrantyCommand) Run(cmd *cobra.Command, args []string) {
 		IsBold:          true,
 		BackgroundColor: &yellowColor,
 	}
+	NewPriceHeaderRichText := recorder.RichText{
+		Value:           "New Price",
+		IsBold:          true,
+		BackgroundColor: &yellowColor,
+	}
+	OldPriceHeaderRichText := recorder.RichText{
+		Value:           "Old Price",
+		IsBold:          true,
+		BackgroundColor: &yellowColor,
+	}
 	err := w.recorder.PutRich([]recorder.RichText{
 		IDHeaderRichText,
 		CodeHeaderRichText,
 		TitleHeaderRichText,
 		WarrantyHeaderRichText,
+		NewPriceHeaderRichText,
+		OldPriceHeaderRichText,
 	})
 	if err != nil {
 		log.Error("fail to record header", logger.FError(err))
 	}
 	for _, productCode := range config.ProductCodes {
-		warranty, err := warrantyWorker.FetchByCode(productCode)
+		productWarranty, err := warrantyWorker.FetchByCode(productCode)
 		if err != nil {
 			log.Error(
 				"fail to fetch warranty by code",
@@ -80,26 +92,34 @@ func (w *WarrantyCommand) Run(cmd *cobra.Command, args []string) {
 			)
 		}
 		IDRichText := recorder.RichText{
-			Value: fmt.Sprintf("%d", warranty.ID),
+			Value: fmt.Sprintf("%d", productWarranty.ID),
 		}
 		CodeRichText := recorder.RichText{
 			Value: productCode,
 		}
 		TitleRichText := recorder.RichText{
-			Value: warranty.Title,
+			Value: productWarranty.Title,
 		}
 		WarrantyRichText := recorder.RichText{
-			Value: warranty.WarrantyText,
+			Value: productWarranty.WarrantyText,
+		}
+		OldPriceRichText := recorder.RichText{
+			Value: productWarranty.OldPrice,
+		}
+		NewPriceRichText := recorder.RichText{
+			Value: productWarranty.NewPrice,
 		}
 		err = w.recorder.PutRich([]recorder.RichText{
 			IDRichText,
 			CodeRichText,
 			TitleRichText,
 			WarrantyRichText,
+			OldPriceRichText,
+			NewPriceRichText,
 		})
 		if err != nil {
 			log.Error(
-				"fail to record warranty info in row",
+				"fail to record product warranty info in row",
 				logger.FError(err),
 				logger.F("productCode", productCode),
 			)

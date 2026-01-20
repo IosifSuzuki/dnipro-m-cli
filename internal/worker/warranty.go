@@ -7,6 +7,7 @@ import (
 	"dniprom-cli/internal/model/network"
 	"dniprom-cli/pkg/logger"
 	"errors"
+	"fmt"
 )
 
 type Warranty struct {
@@ -21,33 +22,35 @@ func NewWarrantyWorker(container container.Container, dniproClient client.Dnipro
 	}
 }
 
-func (w *Warranty) FetchByCode(code string) (*app.Warranty, error) {
+func (w *Warranty) FetchByCode(code string) (*app.ProductWarranty, error) {
 	log := w.container.GetLogger()
 	const defaultMissingValue = "unknown"
-	warranty := app.Warranty{
+	productWarranty := app.ProductWarranty{
 		ID:           -1,
 		Code:         code,
 		Title:        defaultMissingValue,
 		WarrantyText: defaultMissingValue,
+		OldPrice:     defaultMissingValue,
+		NewPrice:     defaultMissingValue,
 	}
 
-	product, err := w.dniproClient.FetchAutocompleteProduct(code)
+	productResponse, err := w.dniproClient.FetchAutocompleteProduct(code)
 	if err != nil {
 		log.Error("fail to fetch autocomplete product", logger.FError(err))
-		return &warranty, err
+		return &productWarranty, err
 	}
 
-	if product == nil {
-		return &warranty, errors.New("product not found")
+	if productResponse == nil {
+		return &productWarranty, errors.New("product not found")
 	}
-	warranty.Title = GetProductName(product)
+	productWarranty.Title = GetProductName(productResponse)
 	log.Debug(
 		"success to fetch autocomplete product",
 		logger.F("code", code),
 	)
 
-	warranty.ID = product.ID
-	warrantyText, err := w.dniproClient.GetWarranty(product.ID)
+	productWarranty.ID = productResponse.ID
+	warrantyText, err := w.dniproClient.GetWarranty(productResponse.ID)
 	if err != nil {
 		log.Error(
 			"fail to fetch warranty's product",
@@ -58,8 +61,14 @@ func (w *Warranty) FetchByCode(code string) (*app.Warranty, error) {
 	if warrantyText == "" {
 		warrantyText = defaultMissingValue
 	}
-	warranty.WarrantyText = warrantyText
-	return &warranty, nil
+	productWarranty.WarrantyText = warrantyText
+	if oldPrice := productResponse.PriceOld.Value; oldPrice != nil {
+		productWarranty.OldPrice = getFormattedPrice(*oldPrice)
+	}
+	if newPrice := productResponse.PriceNew.Value; newPrice != nil {
+		productWarranty.NewPrice = getFormattedPrice(*newPrice)
+	}
+	return &productWarranty, nil
 }
 
 func GetProductName(product *network.Product) string {
@@ -75,4 +84,8 @@ func GetProductName(product *network.Product) string {
 		return product.Name.EN
 	}
 	return defaultProductTitle
+}
+
+func getFormattedPrice(price float64) string {
+	return fmt.Sprintf("%.2f", price)
 }
